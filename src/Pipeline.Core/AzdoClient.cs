@@ -32,6 +32,56 @@ public class AzdoBuild
     public DateTime? FinishTime { get; init; }
 }
 
+public class AzdoTimelineIssue
+{
+    public required string Type { get; init; }
+    public required string Message { get; init; }
+    public string? Category { get; init; }
+}
+
+public class AzdoTimelineRecord
+{
+    public required string Id { get; init; }
+    public string? ParentId { get; init; }
+    public required string Name { get; init; }
+    public required string RecordType { get; init; }
+    public int Order { get; init; }
+    public string? State { get; init; }
+    public string? Result { get; init; }
+    public int ErrorCount { get; init; }
+    public int WarningCount { get; init; }
+    public DateTime? StartTime { get; init; }
+    public DateTime? FinishTime { get; init; }
+    public List<AzdoTimelineIssue> Issues { get; init; } = [];
+    public string? WorkerName { get; init; }
+    public string? LogUrl { get; init; }
+}
+
+public class AzdoTimeline
+{
+    public required List<AzdoTimelineRecord> Records { get; init; }
+
+    /// <summary>All issues (errors and warnings) across all records.</summary>
+    public List<AzdoTimelineIssue> GetIssues() =>
+        Records.SelectMany(r => r.Issues).ToList();
+
+    /// <summary>Names of all Job records.</summary>
+    public List<string> GetJobNames() =>
+        Records.Where(r => r.RecordType == "Job").Select(r => r.Name).ToList();
+
+    /// <summary>Get direct children of a record (or top-level records if parentId is null).</summary>
+    public List<AzdoTimelineRecord> GetChildren(string? parentId) =>
+        Records.Where(r => r.ParentId == parentId).OrderBy(r => r.Order).ToList();
+}
+
+public class AzdoArtifact
+{
+    public int Id { get; init; }
+    public required string Name { get; init; }
+    public string? DownloadUrl { get; init; }
+    public string? ResourceType { get; init; }
+}
+
 public class AzdoTestFailure
 {
     [JsonPropertyName("testCaseTitle")]
@@ -162,6 +212,78 @@ public sealed class AzdoClient
         return failures;
     }
 
+    public async Task<AzdoTimeline> GetTimelineAsync(int buildId)
+    {
+        var url = $"_apis/build/builds/{buildId}/timeline?api-version=7.1";
+        var response = await HttpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+        var raw = JsonSerializer.Deserialize<AzdoTimelineRaw>(json, s_jsonOptions)
+            ?? throw new InvalidOperationException("Failed to deserialize timeline response");
+
+        return new AzdoTimeline
+        {
+            Records = (raw.Records ?? []).Select(r => new AzdoTimelineRecord
+            {
+                Id = r.Id,
+                ParentId = r.ParentId,
+                Name = r.Name,
+                RecordType = r.Type,
+                Order = r.Order,
+                State = r.State,
+                Result = r.Result,
+                ErrorCount = r.ErrorCount,
+                WarningCount = r.WarningCount,
+                StartTime = r.StartTime,
+                FinishTime = r.FinishTime,
+                WorkerName = r.WorkerName,
+                LogUrl = r.Log?.Url,
+                Issues = (r.Issues ?? []).Select(i => new AzdoTimelineIssue
+                {
+                    Type = i.Type,
+                    Message = i.Message,
+                    Category = i.Category,
+                }).ToList(),
+            }).ToList(),
+        };
+    }
+
+    public async Task<List<AzdoArtifact>> GetArtifactsAsync(int buildId)
+    {
+        var url = $"_apis/build/builds/{buildId}/artifacts?api-version=7.1";
+        var response = await HttpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+        var raw = JsonSerializer.Deserialize<AzdoListResponse<AzdoArtifactRaw>>(json, s_jsonOptions)
+            ?? throw new InvalidOperationException("Failed to deserialize artifacts response");
+
+        return raw.Value.Select(a => new AzdoArtifact
+        {
+            Id = a.Id,
+            Name = a.Name,
+            DownloadUrl = a.Resource?.DownloadUrl,
+            ResourceType = a.Resource?.Type,
+        }).ToList();
+    }
+
+    public async Task DownloadArtifactAsync(int buildId, string artifactName, string outputPath)
+    {
+        var artifacts = await GetArtifactsAsync(buildId);
+        var artifact = artifacts.FirstOrDefault(a => a.Name == artifactName)
+            ?? throw new InvalidOperationException($"Artifact '{artifactName}' not found for build {buildId}");
+
+        var downloadUrl = artifact.DownloadUrl
+            ?? throw new InvalidOperationException($"Artifact '{artifactName}' has no download URL");
+
+        using var response = await HttpClient.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+
+        using var fileStream = File.Create(outputPath);
+        await response.Content.CopyToAsync(fileStream);
+    }
+
     // Internal types for JSON deserialization of raw API responses
 
     private class AzdoListResponse<T>
@@ -228,5 +350,95 @@ public sealed class AzdoClient
 
         [JsonPropertyName("stackTrace")]
         public string? StackTrace { get; init; }
+    }
+
+    private class AzdoTimelineRaw
+    {
+        [JsonPropertyName("records")]
+        public List<AzdoTimelineRecordRaw>? Records { get; init; }
+    }
+
+    private class AzdoTimelineRecordRaw
+    {
+        [JsonPropertyName("id")]
+        public required string Id { get; init; }
+
+        [JsonPropertyName("parentId")]
+        public string? ParentId { get; init; }
+
+        [JsonPropertyName("name")]
+        public required string Name { get; init; }
+
+        [JsonPropertyName("type")]
+        public required string Type { get; init; }
+
+        [JsonPropertyName("order")]
+        public int Order { get; init; }
+
+        [JsonPropertyName("state")]
+        public string? State { get; init; }
+
+        [JsonPropertyName("result")]
+        public string? Result { get; init; }
+
+        [JsonPropertyName("errorCount")]
+        public int ErrorCount { get; init; }
+
+        [JsonPropertyName("warningCount")]
+        public int WarningCount { get; init; }
+
+        [JsonPropertyName("startTime")]
+        public DateTime? StartTime { get; init; }
+
+        [JsonPropertyName("finishTime")]
+        public DateTime? FinishTime { get; init; }
+
+        [JsonPropertyName("workerName")]
+        public string? WorkerName { get; init; }
+
+        [JsonPropertyName("issues")]
+        public List<AzdoTimelineIssueRaw>? Issues { get; init; }
+
+        [JsonPropertyName("log")]
+        public AzdoBuildLogReference? Log { get; init; }
+    }
+
+    private class AzdoTimelineIssueRaw
+    {
+        [JsonPropertyName("type")]
+        public required string Type { get; init; }
+
+        [JsonPropertyName("message")]
+        public required string Message { get; init; }
+
+        [JsonPropertyName("category")]
+        public string? Category { get; init; }
+    }
+
+    private class AzdoBuildLogReference
+    {
+        [JsonPropertyName("url")]
+        public string? Url { get; init; }
+    }
+
+    private class AzdoArtifactRaw
+    {
+        [JsonPropertyName("id")]
+        public int Id { get; init; }
+
+        [JsonPropertyName("name")]
+        public required string Name { get; init; }
+
+        [JsonPropertyName("resource")]
+        public AzdoArtifactResourceRaw? Resource { get; init; }
+    }
+
+    private class AzdoArtifactResourceRaw
+    {
+        [JsonPropertyName("downloadUrl")]
+        public string? DownloadUrl { get; init; }
+
+        [JsonPropertyName("type")]
+        public string? Type { get; init; }
     }
 }

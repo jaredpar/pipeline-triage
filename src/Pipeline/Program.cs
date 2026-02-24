@@ -89,6 +89,10 @@ static async Task<int> RunAzdoAsync(string[] args)
     {
         "builds" => await RunAzdoBuildsAsync(actionArgs),
         "tests" => await RunAzdoTestsAsync(actionArgs),
+        "timeline" => await RunAzdoTimelineAsync(actionArgs),
+        "artifacts" => await RunAzdoArtifactsAsync(actionArgs),
+        "download" => await RunAzdoDownloadAsync(actionArgs),
+        "jobs" => await RunAzdoJobsAsync(actionArgs),
         _ => PrintAzdoUsage(),
     };
 }
@@ -191,5 +195,126 @@ static int PrintAzdoUsage()
     Console.Error.WriteLine("Usage:");
     Console.Error.WriteLine("  pipeline azdo builds [--definition <id>] [--top <n>] [--org <org>] [--project <project>]");
     Console.Error.WriteLine("  pipeline azdo tests --build <id> [--org <org>] [--project <project>]");
+    Console.Error.WriteLine("  pipeline azdo timeline --build <id> [--org <org>] [--project <project>]");
+    Console.Error.WriteLine("  pipeline azdo artifacts --build <id> [--org <org>] [--project <project>]");
+    Console.Error.WriteLine("  pipeline azdo jobs --build <id> [--org <org>] [--project <project>]");
+    Console.Error.WriteLine("  pipeline azdo download --build <id> --artifact <name> --output <path> [--org <org>] [--project <project>]");
     return 1;
+}
+
+static async Task<int> RunAzdoTimelineAsync(string[] args)
+{
+    var org = GetOption(args, "--org") ?? AzdoClient.DefaultOrganization;
+    var project = GetOption(args, "--project") ?? AzdoClient.DefaultProject;
+    var buildValue = GetOption(args, "--build");
+
+    if (buildValue is null)
+    {
+        Console.Error.WriteLine("Error: --build is required");
+        PrintAzdoUsage();
+        return 1;
+    }
+
+    if (!int.TryParse(buildValue, out var buildId))
+    {
+        Console.Error.WriteLine($"Error: --build must be an integer, got '{buildValue}'");
+        return 1;
+    }
+
+    var credential = new DefaultAzureCredential();
+    var client = await AzdoClient.CreateAsync(credential, org, project);
+    var timeline = await client.GetTimelineAsync(buildId);
+
+    var options = new JsonSerializerOptions { WriteIndented = true };
+    Console.WriteLine(JsonSerializer.Serialize(timeline, options));
+    return 0;
+}
+
+static async Task<int> RunAzdoArtifactsAsync(string[] args)
+{
+    var org = GetOption(args, "--org") ?? AzdoClient.DefaultOrganization;
+    var project = GetOption(args, "--project") ?? AzdoClient.DefaultProject;
+    var buildValue = GetOption(args, "--build");
+
+    if (buildValue is null)
+    {
+        Console.Error.WriteLine("Error: --build is required");
+        PrintAzdoUsage();
+        return 1;
+    }
+
+    if (!int.TryParse(buildValue, out var buildId))
+    {
+        Console.Error.WriteLine($"Error: --build must be an integer, got '{buildValue}'");
+        return 1;
+    }
+
+    var credential = new DefaultAzureCredential();
+    var client = await AzdoClient.CreateAsync(credential, org, project);
+    var artifacts = await client.GetArtifactsAsync(buildId);
+
+    var options = new JsonSerializerOptions { WriteIndented = true };
+    Console.WriteLine(JsonSerializer.Serialize(artifacts, options));
+    return 0;
+}
+
+static async Task<int> RunAzdoDownloadAsync(string[] args)
+{
+    var org = GetOption(args, "--org") ?? AzdoClient.DefaultOrganization;
+    var project = GetOption(args, "--project") ?? AzdoClient.DefaultProject;
+    var buildValue = GetOption(args, "--build");
+    var artifactName = GetOption(args, "--artifact");
+    var outputPath = GetOption(args, "--output");
+
+    if (buildValue is null || artifactName is null || outputPath is null)
+    {
+        Console.Error.WriteLine("Error: --build, --artifact, and --output are required");
+        PrintAzdoUsage();
+        return 1;
+    }
+
+    if (!int.TryParse(buildValue, out var buildId))
+    {
+        Console.Error.WriteLine($"Error: --build must be an integer, got '{buildValue}'");
+        return 1;
+    }
+
+    var credential = new DefaultAzureCredential();
+    var client = await AzdoClient.CreateAsync(credential, org, project);
+    await client.DownloadArtifactAsync(buildId, artifactName, outputPath);
+
+    Console.WriteLine($"Artifact '{artifactName}' downloaded to {outputPath}");
+    return 0;
+}
+
+static async Task<int> RunAzdoJobsAsync(string[] args)
+{
+    var org = GetOption(args, "--org") ?? AzdoClient.DefaultOrganization;
+    var project = GetOption(args, "--project") ?? AzdoClient.DefaultProject;
+    var buildValue = GetOption(args, "--build");
+
+    if (buildValue is null)
+    {
+        Console.Error.WriteLine("Error: --build is required");
+        PrintAzdoUsage();
+        return 1;
+    }
+
+    if (!int.TryParse(buildValue, out var buildId))
+    {
+        Console.Error.WriteLine($"Error: --build must be an integer, got '{buildValue}'");
+        return 1;
+    }
+
+    var credential = new DefaultAzureCredential();
+    var client = await AzdoClient.CreateAsync(credential, org, project);
+    var timeline = await client.GetTimelineAsync(buildId);
+    var jobs = timeline.Records
+        .Where(r => r.RecordType == "Job")
+        .OrderBy(r => r.Order)
+        .ToList();
+
+    var options = new JsonSerializerOptions { WriteIndented = true };
+    Console.WriteLine(JsonSerializer.Serialize(jobs, options));
+    return 0;
 }
