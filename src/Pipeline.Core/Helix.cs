@@ -1,4 +1,5 @@
-
+
+
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Azure.Core;
@@ -24,6 +25,14 @@ public class HelixWorkItem
     public int AzdoAttempt { get; init; }
     [JsonPropertyName("machineName")]
     public required string MachineName { get; init; }
+    [JsonPropertyName("exitCode")]
+    public int ExitCode { get; init; }
+    [JsonPropertyName("consoleUri")]
+    public required string ConsoleUri { get; init; }
+    [JsonPropertyName("jobId")]
+    public long JobId { get; init; }
+    [JsonPropertyName("jobName")]
+    public required string JobName { get; init; }
 }
 
 public sealed class Helix
@@ -63,12 +72,11 @@ public sealed class Helix
             | extend AzdoAttempt = tostring(p["System.JobAttempt"])
             | extend ExecutionTime = (Finished - Started) / 1s
             | extend QueuedTime = (Started - Queued) / 1s
-            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName
+            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName
             """;
 
         return QueryHelixWorkItem(query);
     }
-
 
     public Task<List<HelixWorkItem>> GetHelixWorkItemsForPullRequestAsync(string owner, string repository, int prNumber)
     {
@@ -84,7 +92,7 @@ public sealed class Helix
             | extend AzdoBuildId = toint(p["BuildId"])
             | extend ExecutionTime = (Finished - Started) / 1s
             | extend QueuedTime = (Started - Queued) / 1s
-            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName
+            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName
             """;
 
         return QueryHelixWorkItem(query);
@@ -113,6 +121,10 @@ public sealed class Helix
                 var azdoPhaseName = reader.GetString(4);
                 var azdoAttempt = int.Parse(reader.GetString(5));
                 var machineName = reader.GetString(6);
+                var exitCode = reader.GetInt32(7);
+                var consoleUri = reader.GetString(8);
+                var jobId = reader.GetInt64(9);
+                var jobName = reader.GetString(10);
 
                 list.Add(new HelixWorkItem
                 {
@@ -122,7 +134,11 @@ public sealed class Helix
                     AzdoBuildId = azdoBuildId,
                     AzdoPhaseName = azdoPhaseName,
                     AzdoAttempt = azdoAttempt,
-                    MachineName = machineName
+                    MachineName = machineName,
+                    ExitCode = exitCode,
+                    ConsoleUri = consoleUri,
+                    JobId = jobId,
+                    JobName = jobName
                 });
             }
 
