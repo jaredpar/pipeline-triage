@@ -93,6 +93,7 @@ static async Task<int> RunAzdoAsync(string[] args)
         "artifacts" => await RunAzdoArtifactsAsync(actionArgs),
         "download" => await RunAzdoDownloadAsync(actionArgs),
         "jobs" => await RunAzdoJobsAsync(actionArgs),
+        "pr-builds" => await RunAzdoPrBuildsAsync(actionArgs),
         _ => PrintAzdoUsage(),
     };
 }
@@ -198,6 +199,7 @@ static int PrintAzdoUsage()
     Console.Error.WriteLine("  pipeline azdo timeline --build <id> [--org <org>] [--project <project>]");
     Console.Error.WriteLine("  pipeline azdo artifacts --build <id> [--org <org>] [--project <project>]");
     Console.Error.WriteLine("  pipeline azdo jobs --build <id> [--org <org>] [--project <project>]");
+    Console.Error.WriteLine("  pipeline azdo pr-builds --repo <owner/repo> --pr <number> [--top <n>] [--org <org>] [--project <project>]");
     Console.Error.WriteLine("  pipeline azdo download --build <id> --artifact <name> --output <path> [--org <org>] [--project <project>]");
     return 1;
 }
@@ -316,5 +318,45 @@ static async Task<int> RunAzdoJobsAsync(string[] args)
 
     var options = new JsonSerializerOptions { WriteIndented = true };
     Console.WriteLine(JsonSerializer.Serialize(jobs, options));
+    return 0;
+}
+
+static async Task<int> RunAzdoPrBuildsAsync(string[] args)
+{
+    var org = GetOption(args, "--org") ?? AzdoClient.DefaultOrganization;
+    var project = GetOption(args, "--project") ?? AzdoClient.DefaultProject;
+    var repo = GetOption(args, "--repo");
+    var prValue = GetOption(args, "--pr");
+    var topValue = GetOption(args, "--top");
+
+    if (repo is null || prValue is null)
+    {
+        Console.Error.WriteLine("Error: --repo and --pr are required");
+        PrintAzdoUsage();
+        return 1;
+    }
+
+    if (!int.TryParse(prValue, out var prNumber))
+    {
+        Console.Error.WriteLine($"Error: --pr must be an integer, got '{prValue}'");
+        return 1;
+    }
+
+    var top = 10;
+    if (topValue is not null)
+    {
+        if (!int.TryParse(topValue, out top))
+        {
+            Console.Error.WriteLine($"Error: --top must be an integer, got '{topValue}'");
+            return 1;
+        }
+    }
+
+    var credential = new DefaultAzureCredential();
+    var client = await AzdoClient.CreateAsync(credential, org, project);
+    var builds = await client.GetBuildsForPullRequestAsync(repo, prNumber, top);
+
+    var options = new JsonSerializerOptions { WriteIndented = true };
+    Console.WriteLine(JsonSerializer.Serialize(builds, options));
     return 0;
 }

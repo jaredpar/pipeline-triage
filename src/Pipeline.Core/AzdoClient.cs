@@ -142,7 +142,7 @@ public sealed class AzdoClient
     }
 
     private string GetBuildUri(int buildId) =>
-        $"https://dev.azure.com/{Organization}/{Project}/_build/results?buildId={buildId}&view=results";
+        $"https://dev.azure.com/{Organization}/{Project}/_build/results?buildId={buildId}";
 
     public async Task<List<AzdoBuild>> GetRecentBuildsAsync(int? definitionId = null, int top = 10)
     {
@@ -151,6 +151,31 @@ public sealed class AzdoClient
         {
             url += $"&definitions={definitionId}";
         }
+
+        var response = await HttpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+        var result = JsonSerializer.Deserialize<AzdoListResponse<AzdoBuildRaw>>(json, s_jsonOptions)
+            ?? throw new InvalidOperationException("Failed to deserialize builds response");
+
+        return result.Value.Select(b => new AzdoBuild
+        {
+            Id = b.Id,
+            BuildNumber = b.BuildNumber,
+            Status = b.Status,
+            Result = b.Result,
+            Uri = GetBuildUri(b.Id),
+            SourceBranch = b.SourceBranch,
+            DefinitionName = b.Definition?.Name ?? "unknown",
+            FinishTime = b.FinishTime,
+        }).ToList();
+    }
+
+    public async Task<List<AzdoBuild>> GetBuildsForPullRequestAsync(string repository, int prNumber, int top = 10)
+    {
+        var branchName = $"refs/pull/{prNumber}/merge";
+        var url = $"_apis/build/builds?api-version=7.1&$top={top}&branchName={Uri.EscapeDataString(branchName)}&repositoryId={Uri.EscapeDataString(repository)}&repositoryType=GitHub";
 
         var response = await HttpClient.GetAsync(url);
         response.EnsureSuccessStatusCode();
