@@ -6,7 +6,7 @@ using Pipeline.Core;
 namespace Pipeline.Mcp;
 
 [McpServerToolType]
-public class HelixTools
+public class HelixMcpTools
 {
     private static readonly JsonSerializerOptions s_jsonOptions = new() { WriteIndented = true };
 

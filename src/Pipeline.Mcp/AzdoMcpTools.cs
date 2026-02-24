@@ -6,7 +6,7 @@ using Pipeline.Core;
 namespace Pipeline.Mcp;
 
 [McpServerToolType]
-public class AzdoTools
+public class AzdoMcpTools
 {
     private static readonly JsonSerializerOptions s_jsonOptions = new() { WriteIndented = true };
 
