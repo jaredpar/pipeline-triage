@@ -33,7 +33,7 @@ public class HelixWorkItem
     public required string JobName { get; init; }
 }
 
-public sealed class Helix
+public sealed class HelixClient
 {
     private const string ClusterUrl = "https://engsrvprod.kusto.windows.net";
     private const string DatabaseName = "engineeringdata";
@@ -41,23 +41,24 @@ public sealed class Helix
     private AccessToken AccessToken { get; } 
     private KustoConnectionStringBuilder KustoConnectionStringBuilder { get; }
 
-    private Helix(AccessToken accessToken)
+    private HelixClient(AccessToken accessToken)
     {
         AccessToken = accessToken;
         KustoConnectionStringBuilder = new KustoConnectionStringBuilder(ClusterUrl, DatabaseName)
-            .WithAadTokenProviderAuthentication(() => accessToken.Token);
+            .WithAadTokenProviderAuthentication(() => AccessToken.Token);
     }
 
-    public static async Task<Helix> CreateAsync(TokenCredential tokenCredential)
+    public static async Task<HelixClient> CreateAsync(TokenCredential tokenCredential)
     {
         var tokenRequestContext = new TokenRequestContext(["https://kusto.kusto.windows.net/.default"]);
         var token = await tokenCredential.GetTokenAsync(tokenRequestContext, default);
 
-        return new Helix(token);
+        return new HelixClient(token);
     } 
 
-    public Task<List<HelixWorkItem>> GetHelixWorkItemsForBuild(string owner, string repository, int buildNumber)
+    public Task<List<HelixWorkItem>> GetHelixWorkItemsForBuild(string owner, string repository, int buildNumber, bool includeAll = false)
     {
+        var failedFilter = includeAll ? "" : "| where ExitCode != 0";
         string query = $"""
             Jobs
             | where Repository == "{owner}/{repository}"
@@ -70,14 +71,16 @@ public sealed class Helix
             | extend AzdoAttempt = tostring(p["System.JobAttempt"])
             | extend ExecutionTime = (Finished - Started) / 1s
             | extend QueuedTime = (Started - Queued) / 1s
+            {failedFilter}
             | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName
             """;
 
         return QueryHelixWorkItem(query);
     }
 
-    public Task<List<HelixWorkItem>> GetHelixWorkItemsForPullRequestAsync(string owner, string repository, int prNumber)
+    public Task<List<HelixWorkItem>> GetHelixWorkItemsForPullRequestAsync(string owner, string repository, int prNumber, bool includeAll = false)
     {
+        var failedFilter = includeAll ? "" : "| where ExitCode != 0";
         string query = $"""
             Jobs
             | where Repository == "{owner}/{repository}"
@@ -90,6 +93,7 @@ public sealed class Helix
             | extend AzdoBuildId = toint(p["BuildId"])
             | extend ExecutionTime = (Finished - Started) / 1s
             | extend QueuedTime = (Started - Queued) / 1s
+            {failedFilter}
             | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName
             """;
 

@@ -172,6 +172,34 @@ public sealed class AzdoClient
         }).ToList();
     }
 
+    public async Task<List<AzdoBuild>> GetBuildsForRepositoryAsync(string repository, int top = 10, string? reasonFilter = null)
+    {
+        var url = $"_apis/build/builds?api-version=7.1&$top={top}&repositoryId={Uri.EscapeDataString(repository)}&repositoryType=GitHub";
+        if (reasonFilter is not null)
+        {
+            url += $"&reasonFilter={Uri.EscapeDataString(reasonFilter)}";
+        }
+
+        var response = await HttpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+        var result = JsonSerializer.Deserialize<AzdoListResponse<AzdoBuildRaw>>(json, s_jsonOptions)
+            ?? throw new InvalidOperationException("Failed to deserialize builds response");
+
+        return result.Value.Select(b => new AzdoBuild
+        {
+            Id = b.Id,
+            BuildNumber = b.BuildNumber,
+            Status = b.Status,
+            Result = b.Result,
+            Uri = GetBuildUri(b.Id),
+            SourceBranch = b.SourceBranch,
+            DefinitionName = b.Definition?.Name ?? "unknown",
+            FinishTime = b.FinishTime,
+        }).ToList();
+    }
+
     public async Task<List<AzdoBuild>> GetBuildsForPullRequestAsync(string repository, int prNumber, int top = 10)
     {
         var branchName = $"refs/pull/{prNumber}/merge";

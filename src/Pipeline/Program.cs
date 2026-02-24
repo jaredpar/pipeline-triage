@@ -23,6 +23,7 @@ static async Task<int> RunHelixAsync(string[] args)
     var repo = GetOption(args, "--repo");
     var prValue = GetOption(args, "--pr");
     var buildValue = GetOption(args, "--build");
+    var includeAll = HasFlag(args, "--all");
 
     if (repo is null)
     {
@@ -47,7 +48,7 @@ static async Task<int> RunHelixAsync(string[] args)
     }
 
     var credential = new DefaultAzureCredential();
-    var helix = await Helix.CreateAsync(credential);
+    var helix = await HelixClient.CreateAsync(credential);
 
     List<HelixWorkItem> workItems;
     if (prValue is not null)
@@ -57,7 +58,7 @@ static async Task<int> RunHelixAsync(string[] args)
             Console.Error.WriteLine($"Error: --pr must be an integer, got '{prValue}'");
             return 1;
         }
-        workItems = await helix.GetHelixWorkItemsForPullRequestAsync(owner, repository, prNumber);
+        workItems = await helix.GetHelixWorkItemsForPullRequestAsync(owner, repository, prNumber, includeAll);
     }
     else
     {
@@ -66,7 +67,7 @@ static async Task<int> RunHelixAsync(string[] args)
             Console.Error.WriteLine($"Error: --build must be an integer, got '{buildValue}'");
             return 1;
         }
-        workItems = await helix.GetHelixWorkItemsForBuild(owner, repository, buildNumber);
+        workItems = await helix.GetHelixWorkItemsForBuild(owner, repository, buildNumber, includeAll);
     }
 
     var options = new JsonSerializerOptions { WriteIndented = true };
@@ -94,6 +95,7 @@ static async Task<int> RunAzdoAsync(string[] args)
         "download" => await RunAzdoDownloadAsync(actionArgs),
         "jobs" => await RunAzdoJobsAsync(actionArgs),
         "pr-builds" => await RunAzdoPrBuildsAsync(actionArgs),
+        "repo-builds" => await RunAzdoRepoBuildsAsync(actionArgs),
         _ => PrintAzdoUsage(),
     };
 }
@@ -186,8 +188,8 @@ static int PrintUsage()
 static int PrintHelixUsage()
 {
     Console.Error.WriteLine("Usage:");
-    Console.Error.WriteLine("  pipeline helix --repo <owner/repo> --pr <number>");
-    Console.Error.WriteLine("  pipeline helix --repo <owner/repo> --build <number>");
+    Console.Error.WriteLine("  pipeline helix --repo <owner/repo> --pr <number> [--all]");
+    Console.Error.WriteLine("  pipeline helix --repo <owner/repo> --build <number> [--all]");
     return 1;
 }
 
@@ -200,6 +202,7 @@ static int PrintAzdoUsage()
     Console.Error.WriteLine("  pipeline azdo artifacts --build <id> [--org <org>] [--project <project>]");
     Console.Error.WriteLine("  pipeline azdo jobs --build <id> [--org <org>] [--project <project>]");
     Console.Error.WriteLine("  pipeline azdo pr-builds --repo <owner/repo> --pr <number> [--top <n>] [--org <org>] [--project <project>]");
+    Console.Error.WriteLine("  pipeline azdo repo-builds --repo <owner/repo> [--pr] [--ci] [--top <n>] [--org <org>] [--project <project>]");
     Console.Error.WriteLine("  pipeline azdo download --build <id> --artifact <name> --output <path> [--org <org>] [--project <project>]");
     return 1;
 }
@@ -355,6 +358,51 @@ static async Task<int> RunAzdoPrBuildsAsync(string[] args)
     var credential = new DefaultAzureCredential();
     var client = await AzdoClient.CreateAsync(credential, org, project);
     var builds = await client.GetBuildsForPullRequestAsync(repo, prNumber, top);
+
+    var options = new JsonSerializerOptions { WriteIndented = true };
+    Console.WriteLine(JsonSerializer.Serialize(builds, options));
+    return 0;
+}
+
+static bool HasFlag(string[] args, string name) =>
+    args.Any(a => a == name);
+
+static async Task<int> RunAzdoRepoBuildsAsync(string[] args)
+{
+    var org = GetOption(args, "--org") ?? AzdoClient.DefaultOrganization;
+    var project = GetOption(args, "--project") ?? AzdoClient.DefaultProject;
+    var repo = GetOption(args, "--repo");
+    var topValue = GetOption(args, "--top");
+    var filterPr = HasFlag(args, "--pr");
+    var filterCi = HasFlag(args, "--ci");
+
+    if (repo is null)
+    {
+        Console.Error.WriteLine("Error: --repo is required");
+        PrintAzdoUsage();
+        return 1;
+    }
+
+    var top = 10;
+    if (topValue is not null)
+    {
+        if (!int.TryParse(topValue, out top))
+        {
+            Console.Error.WriteLine($"Error: --top must be an integer, got '{topValue}'");
+            return 1;
+        }
+    }
+
+    string? reasonFilter = (filterPr, filterCi) switch
+    {
+        (true, false) => "pullRequest",
+        (false, true) => "individualCI,batchedCI",
+        _ => null,
+    };
+
+    var credential = new DefaultAzureCredential();
+    var client = await AzdoClient.CreateAsync(credential, org, project);
+    var builds = await client.GetBuildsForRepositoryAsync(repo, top, reasonFilter);
 
     var options = new JsonSerializerOptions { WriteIndented = true };
     Console.WriteLine(JsonSerializer.Serialize(builds, options));

@@ -12,8 +12,11 @@ builder.Logging.AddConsole(options =>
 });
 
 var credential = new DefaultAzureCredential();
-var helix = await Helix.CreateAsync(credential);
+var helix = await HelixClient.CreateAsync(credential);
 builder.Services.AddSingleton(helix);
+
+var azdoClient = await AzdoClient.CreateAsync(credential);
+builder.Services.AddSingleton(azdoClient);
 
 builder.Services
     .AddMcpServer()
