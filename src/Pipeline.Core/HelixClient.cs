@@ -13,6 +13,8 @@ public class HelixWorkItem
     public required string FriendlyName { get; init; }
     [JsonPropertyName("executionTime")]
     public int ExecutionTime { get; init; }
+    [JsonPropertyName("queueName")]
+    public required string QueueName { get; init; }
     [JsonPropertyName("queuedTime")]
     public int QueuedTime { get; init; }
     [JsonPropertyName("azdoBuildId")]
@@ -72,7 +74,7 @@ public sealed class HelixClient
             | extend ExecutionTime = (Finished - Started) / 1s
             | extend QueuedTime = (Started - Queued) / 1s
             {failedFilter}
-            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName
+            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName, QueueName
             """;
 
         return QueryHelixWorkItem(query);
@@ -94,7 +96,7 @@ public sealed class HelixClient
             | extend ExecutionTime = (Finished - Started) / 1s
             | extend QueuedTime = (Started - Queued) / 1s
             {failedFilter}
-            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName
+            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName, QueueName
             """;
 
         return QueryHelixWorkItem(query);
@@ -127,6 +129,7 @@ public sealed class HelixClient
                 var consoleUri = reader.GetString(8);
                 var jobId = reader.GetInt64(9);
                 var jobName = reader.GetString(10);
+                var queueName = reader.GetString(11);
 
                 list.Add(new HelixWorkItem
                 {
@@ -140,7 +143,8 @@ public sealed class HelixClient
                     ExitCode = exitCode,
                     ConsoleUri = consoleUri,
                     JobId = jobId,
-                    JobName = jobName
+                    JobName = jobName,
+                    QueueName = queueName
                 });
             }
 
