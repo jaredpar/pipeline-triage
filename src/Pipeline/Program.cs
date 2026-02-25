@@ -20,6 +20,24 @@ return subcommand switch
 
 static async Task<int> RunHelixAsync(string[] args)
 {
+    if (args.Length == 0)
+    {
+        PrintHelixUsage();
+        return 1;
+    }
+
+    var action = args[0];
+    var actionArgs = args[1..];
+
+    return action switch
+    {
+        "workitems" => await RunHelixWorkItemsAsync(actionArgs),
+        _ => PrintHelixUsage(),
+    };
+}
+
+static async Task<int> RunHelixWorkItemsAsync(string[] args)
+{
     var repo = GetOption(args, "--repo");
     var prValue = GetOption(args, "--pr");
     var buildValue = GetOption(args, "--build");
@@ -188,8 +206,8 @@ static int PrintUsage()
 static int PrintHelixUsage()
 {
     Console.Error.WriteLine("Usage:");
-    Console.Error.WriteLine("  pipeline helix --repo <owner/repo> --pr <number> [--all]");
-    Console.Error.WriteLine("  pipeline helix --repo <owner/repo> --build <number> [--all]");
+    Console.Error.WriteLine("  pipeline helix workitems --repo <owner/repo> --pr <number> [--all]");
+    Console.Error.WriteLine("  pipeline helix workitems --repo <owner/repo> --build <number> [--all]");
     return 1;
 }
 
