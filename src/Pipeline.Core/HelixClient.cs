@@ -37,6 +37,8 @@ public class HelixWorkItem
     public DateTime Finished { get; init; }
     [JsonPropertyName("workItemId")]
     public long WorkItemId { get; init; }
+    [JsonPropertyName("status")]
+    public required string Status { get; init; }
 }
 
 public class HelixWorkItemConsole
@@ -88,7 +90,7 @@ public sealed class HelixClient
             | extend ExecutionTime = (Finished - Started) / 1s
             | extend QueuedTime = (Started - Queued) / 1s
             {failedFilter}
-            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName, QueueName, Finished, WorkItemId
+            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName, QueueName, Finished, WorkItemId, Status
             """;
 
         return QueryHelixWorkItem(query);
@@ -110,7 +112,7 @@ public sealed class HelixClient
             | extend ExecutionTime = (Finished - Started) / 1s
             | extend QueuedTime = (Started - Queued) / 1s
             {failedFilter}
-            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName, QueueName, Finished, WorkItemId
+            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName, QueueName, Finished, WorkItemId, Status
             """;
 
         return QueryHelixWorkItem(query);
@@ -129,7 +131,7 @@ public sealed class HelixClient
             | extend AzdoBuildId = toint(p["BuildId"])
             | extend ExecutionTime = (Finished - Started) / 1s
             | extend QueuedTime = (Started - Queued) / 1s
-            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName, QueueName, Finished, WorkItemId
+            | project FriendlyName, ExecutionTime, QueuedTime, AzdoBuildId, AzdoPhaseName, AzdoAttempt, MachineName, ExitCode, ConsoleUri, JobId, JobName, QueueName, Finished, WorkItemId, Status
             """;
 
         var items = await QueryHelixWorkItem(query);
@@ -161,6 +163,7 @@ public sealed class HelixClient
                 var queueName = reader.GetString(11);
                 var finished = reader.GetDateTime(12);
                 var workItemId = reader.GetInt64(13);
+                var status = reader.GetString(14);
 
                 list.Add(new HelixWorkItem
                 {
@@ -177,7 +180,8 @@ public sealed class HelixClient
                     JobName = jobName,
                     QueueName = queueName,
                     Finished = finished,
-                    WorkItemId = workItemId
+                    WorkItemId = workItemId,
+                    Status = status
                 });
             }
 
