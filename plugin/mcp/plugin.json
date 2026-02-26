@@ -10,7 +10,7 @@
             "command": "dotnet",
             "args": [
                 "exec",
-                "../bin/Pipeline.Mcp/debug/Pipeline.Mcp.dll"
+                "mcp/Pipeline.Mcp.dll"
             ],
             "type": "stdio"
       }
