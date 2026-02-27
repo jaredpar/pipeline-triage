@@ -7,6 +7,8 @@ This is a copilot plugin that helps with pipeline triage in the github.com/dotne
 
 This tool is still in early development and may have some rough edges.
 
+Run `./dogfood-mcp.ps1` to get started.
+
 Example prompts to try:
 
 > Look at the builds of dotnet/roslyn for the last 48 hours. Tell me about any patterns in the test or helix failures.
