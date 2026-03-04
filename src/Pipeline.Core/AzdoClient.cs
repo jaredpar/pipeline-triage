@@ -132,21 +132,22 @@ public sealed class AzdoClient
         var tokenRequestContext = new TokenRequestContext(["499b84ac-1321-427f-aa17-267ca6975798/.default"]);
         var token = await tokenCredential.GetTokenAsync(tokenRequestContext, default);
 
-        var httpClient = new HttpClient
-        {
-            BaseAddress = new Uri($"https://dev.azure.com/{organization}/{project}/"),
-        };
+        var httpClient = new HttpClient();
         httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
 
         return new AzdoClient(httpClient, organization, project);
     }
 
-    private string GetBuildUri(int buildId) =>
-        $"https://dev.azure.com/{Organization}/{Project}/_build/results?buildId={buildId}";
+    private string GetBaseUrl(string? organization = null, string? project = null) =>
+        $"https://dev.azure.com/{organization ?? Organization}/{project ?? Project}/";
 
-    public async Task<List<AzdoBuild>> GetRecentBuildsAsync(int? definitionId = null, int top = 10)
+    private string GetBuildUri(int buildId, string? organization = null, string? project = null) =>
+        $"https://dev.azure.com/{organization ?? Organization}/{project ?? Project}/_build/results?buildId={buildId}";
+
+    public async Task<List<AzdoBuild>> GetRecentBuildsAsync(int? definitionId = null, int top = 10, string? organization = null, string? project = null)
     {
-        var url = $"_apis/build/builds?api-version=7.1&$top={top}";
+        var baseUrl = GetBaseUrl(organization, project);
+        var url = $"{baseUrl}_apis/build/builds?api-version=7.1&$top={top}";
         if (definitionId is not null)
         {
             url += $"&definitions={definitionId}";
@@ -165,16 +166,17 @@ public sealed class AzdoClient
             BuildNumber = b.BuildNumber,
             Status = b.Status,
             Result = b.Result,
-            Uri = GetBuildUri(b.Id),
+            Uri = GetBuildUri(b.Id, organization, project),
             SourceBranch = b.SourceBranch,
             DefinitionName = b.Definition?.Name ?? "unknown",
             FinishTime = b.FinishTime,
         }).ToList();
     }
 
-    public async Task<List<AzdoBuild>> GetBuildsForRepositoryAsync(string repository, int top = 10, string? reasonFilter = null)
+    public async Task<List<AzdoBuild>> GetBuildsForRepositoryAsync(string repository, int top = 10, string? reasonFilter = null, string repositoryType = "GitHub", string? organization = null, string? project = null)
     {
-        var url = $"_apis/build/builds?api-version=7.1&$top={top}&repositoryId={Uri.EscapeDataString(repository)}&repositoryType=GitHub";
+        var baseUrl = GetBaseUrl(organization, project);
+        var url = $"{baseUrl}_apis/build/builds?api-version=7.1&$top={top}&repositoryId={Uri.EscapeDataString(repository)}&repositoryType={Uri.EscapeDataString(repositoryType)}";
         if (reasonFilter is not null)
         {
             url += $"&reasonFilter={Uri.EscapeDataString(reasonFilter)}";
@@ -193,17 +195,18 @@ public sealed class AzdoClient
             BuildNumber = b.BuildNumber,
             Status = b.Status,
             Result = b.Result,
-            Uri = GetBuildUri(b.Id),
+            Uri = GetBuildUri(b.Id, organization, project),
             SourceBranch = b.SourceBranch,
             DefinitionName = b.Definition?.Name ?? "unknown",
             FinishTime = b.FinishTime,
         }).ToList();
     }
 
-    public async Task<List<AzdoBuild>> GetBuildsForPullRequestAsync(string repository, int prNumber, int top = 10)
+    public async Task<List<AzdoBuild>> GetBuildsForPullRequestAsync(string repository, int prNumber, int top = 10, string repositoryType = "GitHub", string? organization = null, string? project = null)
     {
+        var baseUrl = GetBaseUrl(organization, project);
         var branchName = $"refs/pull/{prNumber}/merge";
-        var url = $"_apis/build/builds?api-version=7.1&$top={top}&branchName={Uri.EscapeDataString(branchName)}&repositoryId={Uri.EscapeDataString(repository)}&repositoryType=GitHub";
+        var url = $"{baseUrl}_apis/build/builds?api-version=7.1&$top={top}&branchName={Uri.EscapeDataString(branchName)}&repositoryId={Uri.EscapeDataString(repository)}&repositoryType={Uri.EscapeDataString(repositoryType)}";
 
         var response = await HttpClient.GetAsync(url);
         response.EnsureSuccessStatusCode();
@@ -218,17 +221,18 @@ public sealed class AzdoClient
             BuildNumber = b.BuildNumber,
             Status = b.Status,
             Result = b.Result,
-            Uri = GetBuildUri(b.Id),
+            Uri = GetBuildUri(b.Id, organization, project),
             SourceBranch = b.SourceBranch,
             DefinitionName = b.Definition?.Name ?? "unknown",
             FinishTime = b.FinishTime,
         }).ToList();
     }
 
-    public async Task<List<AzdoTestFailure>> GetTestFailuresAsync(int buildId)
+    public async Task<List<AzdoTestFailure>> GetTestFailuresAsync(int buildId, string? organization = null, string? project = null)
     {
+        var baseUrl = GetBaseUrl(organization, project);
         var buildUri = $"vstfs:///Build/Build/{buildId}";
-        var runsUrl = $"_apis/test/runs?api-version=7.1&buildUri={Uri.EscapeDataString(buildUri)}";
+        var runsUrl = $"{baseUrl}_apis/test/runs?api-version=7.1&buildUri={Uri.EscapeDataString(buildUri)}";
 
         var runsResponse = await HttpClient.GetAsync(runsUrl);
         runsResponse.EnsureSuccessStatusCode();
@@ -240,7 +244,7 @@ public sealed class AzdoClient
         var failures = new List<AzdoTestFailure>();
         foreach (var run in runs.Value)
         {
-            var resultsUrl = $"_apis/test/Runs/{run.Id}/results?api-version=7.1&outcomes=Failed";
+            var resultsUrl = $"{baseUrl}_apis/test/Runs/{run.Id}/results?api-version=7.1&outcomes=Failed";
             var resultsResponse = await HttpClient.GetAsync(resultsUrl);
             resultsResponse.EnsureSuccessStatusCode();
 
@@ -265,9 +269,10 @@ public sealed class AzdoClient
         return failures;
     }
 
-    public async Task<AzdoTimeline> GetTimelineAsync(int buildId)
+    public async Task<AzdoTimeline> GetTimelineAsync(int buildId, string? organization = null, string? project = null)
     {
-        var url = $"_apis/build/builds/{buildId}/timeline?api-version=7.1";
+        var baseUrl = GetBaseUrl(organization, project);
+        var url = $"{baseUrl}_apis/build/builds/{buildId}/timeline?api-version=7.1";
         var response = await HttpClient.GetAsync(url);
         response.EnsureSuccessStatusCode();
 
@@ -302,9 +307,10 @@ public sealed class AzdoClient
         };
     }
 
-    public async Task<List<AzdoArtifact>> GetArtifactsAsync(int buildId)
+    public async Task<List<AzdoArtifact>> GetArtifactsAsync(int buildId, string? organization = null, string? project = null)
     {
-        var url = $"_apis/build/builds/{buildId}/artifacts?api-version=7.1";
+        var baseUrl = GetBaseUrl(organization, project);
+        var url = $"{baseUrl}_apis/build/builds/{buildId}/artifacts?api-version=7.1";
         var response = await HttpClient.GetAsync(url);
         response.EnsureSuccessStatusCode();
 
@@ -321,9 +327,9 @@ public sealed class AzdoClient
         }).ToList();
     }
 
-    public async Task DownloadArtifactAsync(int buildId, string artifactName, string outputPath)
+    public async Task DownloadArtifactAsync(int buildId, string artifactName, string outputPath, string? organization = null, string? project = null)
     {
-        var artifacts = await GetArtifactsAsync(buildId);
+        var artifacts = await GetArtifactsAsync(buildId, organization, project);
         var artifact = artifacts.FirstOrDefault(a => a.Name == artifactName)
             ?? throw new InvalidOperationException($"Artifact '{artifactName}' not found for build {buildId}");
 
