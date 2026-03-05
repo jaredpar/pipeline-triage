@@ -144,6 +144,33 @@ public sealed class AzdoClient
     private string GetBuildUri(int buildId, string? organization = null, string? project = null) =>
         $"https://dev.azure.com/{organization ?? Organization}/{project ?? Project}/_build/results?buildId={buildId}";
 
+    /// <summary>
+    /// For TfsGit repositories, resolves a repository name to its GUID
+    /// (required by the AzDO builds API). For GitHub repos, returns the name as-is.
+    /// </summary>
+    private async Task<string> ResolveRepositoryIdAsync(string repository, string repositoryType, string? organization = null, string? project = null)
+    {
+        if (!repositoryType.Equals("TfsGit", StringComparison.OrdinalIgnoreCase))
+        {
+            return repository;
+        }
+
+        if (Guid.TryParse(repository, out _))
+        {
+            return repository;
+        }
+
+        var baseUrl = GetBaseUrl(organization, project);
+        var url = $"{baseUrl}_apis/git/repositories/{Uri.EscapeDataString(repository)}?api-version=7.1";
+        var response = await HttpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+        var repo = JsonSerializer.Deserialize<AzdoGitRepository>(json, s_jsonOptions)
+            ?? throw new InvalidOperationException($"Failed to resolve TfsGit repository '{repository}'");
+        return repo.Id;
+    }
+
     public async Task<List<AzdoBuild>> GetRecentBuildsAsync(int? definitionId = null, int top = 10, string? organization = null, string? project = null)
     {
         var baseUrl = GetBaseUrl(organization, project);
@@ -175,8 +202,9 @@ public sealed class AzdoClient
 
     public async Task<List<AzdoBuild>> GetBuildsForRepositoryAsync(string repository, int top = 10, string? reasonFilter = null, string repositoryType = "GitHub", string? organization = null, string? project = null)
     {
+        var repositoryId = await ResolveRepositoryIdAsync(repository, repositoryType, organization, project);
         var baseUrl = GetBaseUrl(organization, project);
-        var url = $"{baseUrl}_apis/build/builds?api-version=7.1&$top={top}&repositoryId={Uri.EscapeDataString(repository)}&repositoryType={Uri.EscapeDataString(repositoryType)}";
+        var url = $"{baseUrl}_apis/build/builds?api-version=7.1&$top={top}&repositoryId={Uri.EscapeDataString(repositoryId)}&repositoryType={Uri.EscapeDataString(repositoryType)}";
         if (reasonFilter is not null)
         {
             url += $"&reasonFilter={Uri.EscapeDataString(reasonFilter)}";
@@ -204,9 +232,10 @@ public sealed class AzdoClient
 
     public async Task<List<AzdoBuild>> GetBuildsForPullRequestAsync(string repository, int prNumber, int top = 10, string repositoryType = "GitHub", string? organization = null, string? project = null)
     {
+        var repositoryId = await ResolveRepositoryIdAsync(repository, repositoryType, organization, project);
         var baseUrl = GetBaseUrl(organization, project);
         var branchName = $"refs/pull/{prNumber}/merge";
-        var url = $"{baseUrl}_apis/build/builds?api-version=7.1&$top={top}&branchName={Uri.EscapeDataString(branchName)}&repositoryId={Uri.EscapeDataString(repository)}&repositoryType={Uri.EscapeDataString(repositoryType)}";
+        var url = $"{baseUrl}_apis/build/builds?api-version=7.1&$top={top}&branchName={Uri.EscapeDataString(branchName)}&repositoryId={Uri.EscapeDataString(repositoryId)}&repositoryType={Uri.EscapeDataString(repositoryType)}";
 
         var response = await HttpClient.GetAsync(url);
         response.EnsureSuccessStatusCode();
@@ -499,5 +528,14 @@ public sealed class AzdoClient
 
         [JsonPropertyName("type")]
         public string? Type { get; init; }
+    }
+
+    private class AzdoGitRepository
+    {
+        [JsonPropertyName("id")]
+        public required string Id { get; init; }
+
+        [JsonPropertyName("name")]
+        public required string Name { get; init; }
     }
 }
