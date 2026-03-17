@@ -11,7 +11,7 @@ try {
   New-Item -ItemType Directory -Path $dogfoodPath -Force | Out-Null
 
   dotnet publish .\src\Pipeline.Mcp\Pipeline.Mcp.csproj -c Debug -o (Join-Path $pluginPath "mcp") --nologo
-  Copy-Item -Path (Join-Path $pipelineRoot "plugin\mcp\*") -Destination $pluginPath -Recurse -Force
+  Copy-Item -Path (Join-Path $pipelineRoot "plugins\basic-triage-mcp\*") -Destination $pluginPath -Recurse -Force
 
   # Use an isolated directory so the copilot session doesn't try to use the tools in the
   # source directory

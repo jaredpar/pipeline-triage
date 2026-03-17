@@ -1,12 +1,12 @@
 {
-    "name": "pipeline-triage",
+    "name": "basic-triage-mcp",
     "description": "A simple plugin for testing scenarios",
     "version": "1.0.0",
     "author": {
         "name": "Jared Parsons"
     },
     "mcpServers": {
-        "pipeline-triage": {
+        "basic-triage-mcp": {
             "command": "dotnet",
             "args": [
                 "exec",
