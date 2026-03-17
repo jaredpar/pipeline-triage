@@ -9,8 +9,11 @@
         "basic-triage-mcp": {
             "command": "dotnet",
             "args": [
-                "exec",
-                "mcp/Pipeline.Mcp.dll"
+                "dnx",
+                "run",
+                "basic-triage-mcp",
+                "--source",
+                "https://api.nuget.org/v3/index.json"
             ],
             "type": "stdio"
       }
