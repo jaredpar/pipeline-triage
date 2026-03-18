@@ -10,8 +10,8 @@
             "command": "dotnet",
             "args": [
                 "dnx",
-                "run",
                 "basic-triage-mcp",
+                "--yes",
                 "--source",
                 "https://api.nuget.org/v3/index.json"
             ],
